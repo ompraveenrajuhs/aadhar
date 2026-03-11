@@ -38,4 +38,11 @@ class AadhaarValidatorTest {
     void shouldThrowForNullMaskInput() {
         assertThrows(IllegalArgumentException.class, () -> validator.mask(null));
     }
+
+    @Test
+    void shouldRecognizeMaskedAadhaarValues() {
+        assertTrue(validator.isMasked("XXXXXXXX1234"));
+        assertFalse(validator.isMasked("123412341234"));
+        assertFalse(validator.isMasked(null));
+    }
 }
