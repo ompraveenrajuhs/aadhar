@@ -10,6 +10,7 @@ Java 21 + Maven project with CI coverage enforcement and AI-assisted test genera
 - GitHub workflow `test-gen.yml` that generates tests using Ollama on a self-hosted runner
 - GitHub workflow `ci.yml` that runs `mvn verify` and uploads JaCoCo report
 - Path filters in `test-gen.yml` to skip docs-only and unrelated changes
+- PowerShell-based self-hosted workflow steps so Windows runners do not need bash
 
 ## Project structure
 
@@ -44,6 +45,8 @@ java -cp target\aadhar-cicd-1.0.0-SNAPSHOT.jar com.aadhar.App 123412341230
    - Maven
    - Python 3.11+
    - Ollama installed and model pulled (default `llama3.1`)
+   - Git available on `PATH`
+   - PowerShell (`pwsh`) available, which is used by the workflow for branch and file checks
 4. Add repository label(s) if desired (for example `automated-tests`, `needs-review`).
 
 ## Notes
@@ -51,3 +54,4 @@ java -cp target\aadhar-cicd-1.0.0-SNAPSHOT.jar com.aadhar.App 123412341230
 - The Ollama workflow assumes `auto-tests` already exists in remote.
 - Generated tests can fail if model output is invalid Java; the workflow catches this by running Maven tests.
 - Test generation runs only when configured source/build/workflow paths change, and can still be triggered manually via workflow dispatch.
+

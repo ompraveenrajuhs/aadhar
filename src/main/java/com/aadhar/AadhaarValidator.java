@@ -23,5 +23,8 @@ public class AadhaarValidator {
         String visiblePart = aadhaarNumber.substring(aadhaarNumber.length() - 4);
         return "XXXXXXXX" + visiblePart;
     }
-}
 
+    public boolean isMasked(String aadhaarNumber) {
+        return aadhaarNumber != null && aadhaarNumber.matches("X{8}\\d{4}");
+    }
+}
