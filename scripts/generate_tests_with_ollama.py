@@ -88,9 +88,17 @@ def parse_source_metadata(source_text):
 
 def build_prompt(source_text):
     return (
-        "Generate a JUnit 5 test class for the following Java source. "
-        "Return only valid Java code in one class. "
-        "Use clear test names and avoid external dependencies beyond JUnit 5.\n\n"
+        "Act as a senior Java test engineer.\n\n"
+        "Goal: Generate JUnit 5 unit tests for the given Java class.\n\n"
+        "Instructions:\n"
+        "- If no test class exists, generate a full JUnit 5 test class.\n"
+        "- If a test class already exists, generate ONLY new @Test methods.\n"
+        "- Do NOT repeat existing tests.\n"
+        "- Do NOT create duplicate classes.\n"
+        "- Focus on edge cases and core logic.\n"
+        "- Use descriptive test names.\n"
+        "- Output ONLY Java code.\n\n"
+        "Source Code:\n"
         f"{source_text}"
     )
 
@@ -98,7 +106,7 @@ def build_prompt(source_text):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--targets", default=".tmp/test-targets.txt")
-    parser.add_argument("--model", default="llama3.1")
+    parser.add_argument("--model", default="phi3")
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
 
