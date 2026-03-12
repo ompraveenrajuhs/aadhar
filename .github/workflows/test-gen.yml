@@ -27,6 +27,7 @@ jobs:
       OLLAMA_HOST: ${{ vars.OLLAMA_HOST }}
       GIT_SSL_NO_VERIFY: "true"
       GIT_HTTP_SSL_VERIFY: "false"
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
     steps:
       - name: Checkout
@@ -37,8 +38,10 @@ jobs:
       - name: Sanitize PATH for tool resolution
         shell: pwsh
         run: |
-          $bad = 'C:\Users\PraveenRajuHS\AppData\Local\Microsoft\WindowsApps\python.exe'
-          $clean = ($env:PATH -split ';' | Where-Object { $_ -and $_ -ne $bad }) -join ';'
+          $segments = $env:PATH -split ';' | Where-Object {
+            $_ -and ($_ -notmatch '(?i)windowsapps\\python\.exe')
+          }
+          $clean = ($segments | Select-Object -Unique) -join ';'
           "PATH=$clean" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Set up Java 21
@@ -95,6 +98,10 @@ jobs:
 
       - name: Create or update PR to auto-tests
         if: steps.target_check.outputs.has_targets == 'true' && (steps.test_attempt.outcome == 'success' || steps.test_retry.outcome == 'success')
+        env:
+          NODE_TLS_REJECT_UNAUTHORIZED: "0"
+          GIT_SSL_NO_VERIFY: "true"
+          GIT_HTTP_SSL_VERIFY: "false"
         uses: peter-evans/create-pull-request@v7
         with:
           branch: bot/generated-tests
