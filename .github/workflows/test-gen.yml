@@ -42,26 +42,14 @@ jobs:
           python-version: "3.11"
 
       - name: Ensure auto-tests branch exists remotely
-        shell: pwsh
-        run: |
-          git ls-remote --exit-code --heads origin auto-tests | Out-Null
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Branch auto-tests does not exist on remote."
-          }
+        run: python scripts/test_gen_precheck.py check-branch --remote origin --branch auto-tests
 
       - name: Find changed classes and transitive dependents
         run: python scripts/find_test_targets.py --base-ref origin/auto-tests --output .tmp/test-targets.txt
 
       - name: Check whether there are generation targets
         id: target_check
-        shell: pwsh
-        run: |
-          if (Test-Path '.tmp/test-targets.txt' -PathType Leaf -and (Get-Item '.tmp/test-targets.txt').Length -gt 0) {
-            "has_targets=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          } else {
-            "has_targets=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-            Write-Host "No Java targets found. Skipping generation and PR update."
-          }
+        run: python scripts/test_gen_precheck.py check-targets --targets .tmp/test-targets.txt
 
       - name: Generate tests with Ollama
         if: steps.target_check.outputs.has_targets == 'true'
