@@ -6,3 +6,5 @@ out/
 *.log
 .tmp/
 .tools/
+__pycache__/
+*.py[cod]

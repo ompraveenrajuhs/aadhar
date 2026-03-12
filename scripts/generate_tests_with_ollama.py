@@ -50,6 +50,30 @@ def is_ollama_healthy(timeout: int = 5) -> bool:
         return False
 
 
+def fetch_installed_models() -> set[str]:
+    req = build_request(HEALTH_PATH)
+    try:
+        with urllib.request.urlopen(req, timeout=15) as response:
+            body = response.read().decode("utf-8")
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Failed to query installed Ollama models at {get_ollama_host()}") from exc
+
+    parsed = json.loads(body)
+    models = parsed.get("models", [])
+    names: set[str] = set()
+    for entry in models:
+        for key in ("name", "model"):
+            value = entry.get(key)
+            if isinstance(value, str) and value.strip():
+                names.add(value.strip())
+    return names
+
+
+def has_model(model: str) -> bool:
+    installed = fetch_installed_models()
+    return model in installed or f"{model}:latest" in installed
+
+
 def start_ollama_server() -> None:
     host = get_ollama_host()
     if not is_local_host(host):
@@ -65,6 +89,7 @@ def start_ollama_server() -> None:
             "Install Ollama or set OLLAMA_EXE to the full path of ollama.exe."
         )
 
+    print(f"Starting Ollama server using: {exe}")
     popen_kwargs = {
         "args": [exe, "serve"],
         "stdout": subprocess.DEVNULL,
@@ -81,12 +106,14 @@ def start_ollama_server() -> None:
 
 def ensure_ollama_ready(timeout_seconds: int = 45) -> None:
     if is_ollama_healthy():
+        print(f"Ollama API already reachable at {get_ollama_host()}")
         return
 
     start_ollama_server()
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
         if is_ollama_healthy():
+            print(f"Ollama API became ready at {get_ollama_host()}")
             return
         time.sleep(2)
 
@@ -96,6 +123,11 @@ def ensure_ollama_ready(timeout_seconds: int = 45) -> None:
 
 
 def ensure_model_available(model: str) -> None:
+    if has_model(model):
+        print(f"Ollama model already available: {model}")
+        return
+
+    print(f"Ollama model not found locally, pulling: {model}")
     exe = resolve_ollama()
     if exe:
         process = subprocess.run(
