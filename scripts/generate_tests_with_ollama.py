@@ -41,7 +41,8 @@ def find_ollama() -> Optional[str]:
 
 
 def run_ollama_http(prompt: str, model: str) -> str:
-    host = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
+    host = os.environ.get("OLLAMA_HOST", "").strip() or "http://127.0.0.1:11434"
+    host = host.rstrip("/")
     url = f"{host}/api/generate"
     payload = json.dumps({"model": model, "prompt": prompt, "stream": False}).encode("utf-8")
     req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
@@ -51,8 +52,8 @@ def run_ollama_http(prompt: str, model: str) -> str:
             body = response.read().decode("utf-8")
     except urllib.error.URLError as exc:
         raise RuntimeError(
-            "Ollama CLI not found and HTTP API is unreachable. "
-            "Ensure Ollama is running and reachable at OLLAMA_HOST (default http://127.0.0.1:11434)."
+            f"Ollama CLI not found and HTTP API is unreachable at {host}. "
+            "Ensure Ollama is running or set OLLAMA_HOST/OLLAMA_EXE correctly."
         ) from exc
 
     parsed = json.loads(body)
