@@ -18,6 +18,7 @@ permissions:
 jobs:
   generate-tests:
     # Defaults to self-hosted runner labels; extend if you add a dedicated label.
+    # Trigger note: touching this workflow file is used for controlled reruns during CI debugging.
     runs-on: [self-hosted]
     if: github.actor != 'github-actions[bot]'
     env:
