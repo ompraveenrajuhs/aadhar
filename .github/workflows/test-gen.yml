@@ -43,8 +43,8 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Ensure auto-tests branch exists remotely
-        run: python scripts/test_gen_precheck.py check-branch --remote origin --branch auto-tests
+      - name: Fetch auto-tests base ref
+        run: git fetch origin auto-tests:refs/remotes/origin/auto-tests
 
       - name: Find changed classes and transitive dependents
         run: python scripts/find_test_targets.py --base-ref origin/auto-tests --output .tmp/test-targets.txt
