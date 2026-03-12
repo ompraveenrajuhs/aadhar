@@ -23,6 +23,7 @@ jobs:
     env:
       OLLAMA_MODEL: llama3.1
       OLLAMA_EXE: ${{ vars.OLLAMA_EXE }}
+      OLLAMA_HOST: ${{ vars.OLLAMA_HOST }}
 
     steps:
       - name: Checkout
@@ -52,21 +53,8 @@ jobs:
         id: target_check
         run: python scripts/test_gen_precheck.py check-targets --targets .tmp/test-targets.txt
 
-      - name: Resolve Ollama executable
-        id: resolve_ollama
-        if: steps.target_check.outputs.has_targets == 'true'
-        run: python scripts/resolve_ollama.py
-
-      - name: Verify Ollama is available and pull model
-        if: steps.target_check.outputs.has_targets == 'true'
-        run: |
-          "${{ steps.resolve_ollama.outputs.ollama_exe }}" --version
-          "${{ steps.resolve_ollama.outputs.ollama_exe }}" pull ${{ env.OLLAMA_MODEL }}
-
       - name: Generate tests with Ollama
         if: steps.target_check.outputs.has_targets == 'true'
-        env:
-          OLLAMA_EXE: ${{ steps.resolve_ollama.outputs.ollama_exe }}
         run: python scripts/generate_tests_with_ollama.py --targets .tmp/test-targets.txt --model ${{ env.OLLAMA_MODEL }}
 
       - name: Run unit tests after generation

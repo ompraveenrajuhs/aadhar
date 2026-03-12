@@ -45,9 +45,10 @@ java -cp target\aadhar-cicd-1.0.0-SNAPSHOT.jar com.aadhar.App 123412341230
    - Maven
    - Python 3.11+
    - Git available on `PATH`
-   - Ollama installed from https://ollama.com/download and available on `PATH`
-   - Model pulled on the runner machine: `ollama pull llama3.1`
-4. Optional but recommended for Windows runner services: set repository variable `OLLAMA_EXE` to full path (for example `C:\Users\<user>\AppData\Local\Programs\Ollama\ollama.exe`).
+   - Ollama server installed/running (default endpoint `http://127.0.0.1:11434`)
+4. Optional repository variables:
+   - `OLLAMA_EXE`: full CLI path (for example `C:\Users\<user>\AppData\Local\Programs\Ollama\ollama.exe`)
+   - `OLLAMA_HOST`: Ollama API base URL if not default
 5. Add repository label(s) if desired (for example `automated-tests`, `needs-review`).
 
 ## Notes
@@ -57,3 +58,4 @@ java -cp target\aadhar-cicd-1.0.0-SNAPSHOT.jar com.aadhar.App 123412341230
 - Test generation runs only when configured source/build/workflow paths change, and can still be triggered manually via workflow dispatch.
 - Branch and target prechecks in `test-gen.yml` are Python-based for shell-independent execution on self-hosted runners.
 - `test-gen.yml` resolves Ollama using `OLLAMA_EXE`, then `PATH`, then common Windows install paths.
+- Test generation now uses CLI when available and automatically falls back to Ollama HTTP API (`OLLAMA_HOST`) when CLI is unavailable.

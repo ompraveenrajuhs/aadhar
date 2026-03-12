@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
 import argparse
+import json
 import pathlib
 import re
 import shutil
 import subprocess
 import sys
 import os
+import urllib.error
+import urllib.request
+from typing import Optional
 
 PACKAGE_RE = re.compile(r"^\s*package\s+([\w\.]+);", re.MULTILINE)
 CLASS_RE = re.compile(r"\bclass\s+(\w+)")
 CODE_BLOCK_RE = re.compile(r"```(?:java)?\n(.*?)```", re.DOTALL)
 
 
-def find_ollama() -> str:
-    """Return the full path to ollama or exit with clear install instructions."""
+def find_ollama() -> Optional[str]:
+    """Return path to ollama CLI if available, else None."""
     explicit = os.environ.get("OLLAMA_EXE", "").strip()
     if explicit:
         explicit_path = pathlib.Path(explicit)
@@ -33,28 +37,47 @@ def find_ollama() -> str:
             if candidate.exists() and candidate.is_file():
                 return str(candidate)
 
-    print(
-        "ERROR: ollama executable not found.\n"
-        "Set OLLAMA_EXE to the full executable path or add ollama to PATH.\n"
-        "Install Ollama: https://ollama.com/download\n"
-        "Then pull the model: ollama pull llama3.1",
-        file=sys.stderr,
-    )
-    raise SystemExit(1)
+    return None
+
+
+def run_ollama_http(prompt: str, model: str) -> str:
+    host = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
+    url = f"{host}/api/generate"
+    payload = json.dumps({"model": model, "prompt": prompt, "stream": False}).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+
+    try:
+        with urllib.request.urlopen(req, timeout=300) as response:
+            body = response.read().decode("utf-8")
+    except urllib.error.URLError as exc:
+        raise RuntimeError(
+            "Ollama CLI not found and HTTP API is unreachable. "
+            "Ensure Ollama is running and reachable at OLLAMA_HOST (default http://127.0.0.1:11434)."
+        ) from exc
+
+    parsed = json.loads(body)
+    text = parsed.get("response", "")
+    if not text:
+        raise RuntimeError("Ollama HTTP API returned an empty response")
+    return text
 
 
 def run_ollama(prompt, model):
     exe = find_ollama()
-    process = subprocess.run(
-        [exe, "run", model],
-        input=prompt,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if process.returncode != 0:
-        raise RuntimeError(process.stderr.strip() or "ollama run failed")
-    return process.stdout
+    if exe:
+        process = subprocess.run(
+            [exe, "run", model],
+            input=prompt,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if process.returncode != 0:
+            raise RuntimeError(process.stderr.strip() or "ollama run failed")
+        return process.stdout
+
+    # Fallback for environments where the Ollama service is running but CLI is not in PATH.
+    return run_ollama_http(prompt, model)
 
 
 def extract_java_code(response):
