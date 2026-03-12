@@ -11,6 +11,7 @@ Java 21 + Maven project with CI coverage enforcement and AI-assisted test genera
 - GitHub workflow `ci.yml` that runs `mvn verify` and uploads JaCoCo report
 - Path filters in `test-gen.yml` to skip docs-only and unrelated changes
 - Python-based precheck steps in `test-gen.yml` for shell-independent execution on self-hosted runners
+- Automatic local Ollama startup in `generate_tests_with_ollama.py` when the runner has Ollama installed but the server is not yet running
 
 ## Project structure
 
@@ -18,7 +19,8 @@ Java 21 + Maven project with CI coverage enforcement and AI-assisted test genera
 - `.github/workflows/test-gen.yml`: AI test generation and PR creation to `auto-tests`
 - `.github/workflows/ci.yml`: test + coverage validation on `auto-tests` and `main`
 - `scripts/find_test_targets.py`: changed files + transitive dependent target selection
-- `scripts/generate_tests_with_ollama.py`: prompts Ollama and writes generated test files
+- `scripts/generate_tests_with_ollama.py`: prompts Ollama, starts local server when needed, and writes generated test files
+- `scripts/resolve_ollama.py`: finds the Ollama executable from env, PATH, or common Windows install locations
 
 ## Local quick start
 
@@ -45,7 +47,7 @@ java -cp target\aadhar-cicd-1.0.0-SNAPSHOT.jar com.aadhar.App 123412341230
    - Maven
    - Python 3.11+
    - Git available on `PATH`
-   - Ollama server installed/running (default endpoint `http://127.0.0.1:11434`)
+   - Ollama installed locally or reachable via `OLLAMA_HOST`
 4. Optional repository variables:
    - `OLLAMA_EXE`: full CLI path (for example `C:\Users\<user>\AppData\Local\Programs\Ollama\ollama.exe`)
    - `OLLAMA_HOST`: Ollama API base URL if not default
@@ -57,5 +59,6 @@ java -cp target\aadhar-cicd-1.0.0-SNAPSHOT.jar com.aadhar.App 123412341230
 - Generated tests can fail if model output is invalid Java; the workflow catches this by running Maven tests.
 - Test generation runs only when configured source/build/workflow paths change, and can still be triggered manually via workflow dispatch.
 - Branch and target prechecks in `test-gen.yml` are Python-based for shell-independent execution on self-hosted runners.
-- `test-gen.yml` resolves Ollama using `OLLAMA_EXE`, then `PATH`, then common Windows install paths.
-- Test generation now uses CLI when available and automatically falls back to Ollama HTTP API (`OLLAMA_HOST`) when CLI is unavailable.
+- `generate_tests_with_ollama.py` resolves Ollama using `OLLAMA_EXE`, then `PATH`, then common Windows install paths.
+- If `OLLAMA_HOST` is local and the API is down, the generator attempts to start `ollama serve` automatically and waits for readiness before pulling the model and generating tests.
+- If `OLLAMA_HOST` points to a remote host, the generator will not try to start it automatically; it expects that host to already be reachable.
