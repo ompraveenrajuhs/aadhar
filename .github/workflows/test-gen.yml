@@ -25,6 +25,8 @@ jobs:
       OLLAMA_MODEL: phi3
       OLLAMA_EXE: ${{ vars.OLLAMA_EXE }}
       OLLAMA_HOST: ${{ vars.OLLAMA_HOST }}
+      GIT_SSL_NO_VERIFY: "true"
+      GIT_HTTP_SSL_VERIFY: "false"
 
     steps:
       - name: Checkout
@@ -84,4 +86,3 @@ jobs:
           labels: |
             automated-tests
             needs-review
-
