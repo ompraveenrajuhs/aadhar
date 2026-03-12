@@ -2,16 +2,34 @@
 import argparse
 import pathlib
 import re
+import shutil
 import subprocess
+import sys
 
 PACKAGE_RE = re.compile(r"^\s*package\s+([\w\.]+);", re.MULTILINE)
 CLASS_RE = re.compile(r"\bclass\s+(\w+)")
 CODE_BLOCK_RE = re.compile(r"```(?:java)?\n(.*?)```", re.DOTALL)
 
 
+def find_ollama() -> str:
+    """Return the full path to ollama or exit with clear install instructions."""
+    exe = shutil.which("ollama")
+    if exe:
+        return exe
+    print(
+        "ERROR: ollama executable not found on PATH.\n"
+        "Install Ollama from https://ollama.com/download\n"
+        "Then pull the model:  ollama pull llama3.1\n"
+        "And make sure the install directory is on the system PATH.",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+
+
 def run_ollama(prompt, model):
+    exe = find_ollama()
     process = subprocess.run(
-        ["ollama", "run", model],
+        [exe, "run", model],
         input=prompt,
         text=True,
         capture_output=True,
@@ -101,4 +119,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 

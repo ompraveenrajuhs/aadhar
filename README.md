@@ -44,8 +44,9 @@ java -cp target\aadhar-cicd-1.0.0-SNAPSHOT.jar com.aadhar.App 123412341230
    - Java 21
    - Maven
    - Python 3.11+
-   - Ollama installed and model pulled (default `llama3.1`)
    - Git available on `PATH`
+   - Ollama installed from https://ollama.com/download and available on `PATH`
+   - Model pulled on the runner machine: `ollama pull llama3.1`
 4. Add repository label(s) if desired (for example `automated-tests`, `needs-review`).
 
 ## Notes
@@ -54,3 +55,4 @@ java -cp target\aadhar-cicd-1.0.0-SNAPSHOT.jar com.aadhar.App 123412341230
 - Generated tests can fail if model output is invalid Java; the workflow catches this by running Maven tests.
 - Test generation runs only when configured source/build/workflow paths change, and can still be triggered manually via workflow dispatch.
 - Branch and target prechecks in `test-gen.yml` are Python-based for shell-independent execution on self-hosted runners.
+
