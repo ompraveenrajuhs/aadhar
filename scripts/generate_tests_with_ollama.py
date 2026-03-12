@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 import sys
+import os
 
 PACKAGE_RE = re.compile(r"^\s*package\s+([\w\.]+);", re.MULTILINE)
 CLASS_RE = re.compile(r"\bclass\s+(\w+)")
@@ -13,14 +14,30 @@ CODE_BLOCK_RE = re.compile(r"```(?:java)?\n(.*?)```", re.DOTALL)
 
 def find_ollama() -> str:
     """Return the full path to ollama or exit with clear install instructions."""
+    explicit = os.environ.get("OLLAMA_EXE", "").strip()
+    if explicit:
+        explicit_path = pathlib.Path(explicit)
+        if explicit_path.exists() and explicit_path.is_file():
+            return str(explicit_path)
+
     exe = shutil.which("ollama")
     if exe:
         return exe
+
+    if os.name == "nt":
+        windows_candidates = [
+            pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Ollama" / "ollama.exe",
+            pathlib.Path(os.environ.get("ProgramFiles", "")) / "Ollama" / "ollama.exe",
+        ]
+        for candidate in windows_candidates:
+            if candidate.exists() and candidate.is_file():
+                return str(candidate)
+
     print(
-        "ERROR: ollama executable not found on PATH.\n"
-        "Install Ollama from https://ollama.com/download\n"
-        "Then pull the model:  ollama pull llama3.1\n"
-        "And make sure the install directory is on the system PATH.",
+        "ERROR: ollama executable not found.\n"
+        "Set OLLAMA_EXE to the full executable path or add ollama to PATH.\n"
+        "Install Ollama: https://ollama.com/download\n"
+        "Then pull the model: ollama pull llama3.1",
         file=sys.stderr,
     )
     raise SystemExit(1)
@@ -119,5 +136,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
