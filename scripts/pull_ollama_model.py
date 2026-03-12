@@ -11,6 +11,7 @@ import urllib.error
 import urllib.request
 import json
 import os
+import time
 
 from resolve_ollama import resolve_ollama
 
@@ -19,19 +20,29 @@ def get_ollama_host() -> str:
     return (os.environ.get("OLLAMA_HOST", "").strip() or "http://127.0.0.1:11434").rstrip("/")
 
 
-def pull_via_cli(exe: str, model: str) -> None:
+def pull_via_cli(exe: str, model: str, retries: int, delay_seconds: int) -> None:
     print(f"Pulling model '{model}' using: {exe}")
-    result = subprocess.run(
-        [exe, "pull", model],
-        text=True,
-        check=False,
+    last_code = 1
+    for attempt in range(1, retries + 1):
+        result = subprocess.run(
+            [exe, "pull", model],
+            text=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            print(f"Model '{model}' pulled successfully via CLI.")
+            return
+        last_code = result.returncode
+        if attempt < retries:
+            print(f"Pull attempt {attempt}/{retries} failed; retrying in {delay_seconds}s...")
+            time.sleep(delay_seconds)
+
+    raise SystemExit(
+        f"ollama pull {model} failed after {retries} attempts (last exit code {last_code})."
     )
-    if result.returncode != 0:
-        raise SystemExit(f"ollama pull {model} failed with exit code {result.returncode}")
-    print(f"Model '{model}' pulled successfully via CLI.")
 
 
-def pull_via_http(model: str) -> None:
+def pull_via_http(model: str, retries: int, delay_seconds: int) -> None:
     host = get_ollama_host()
     print(f"Pulling model '{model}' via Ollama HTTP API at {host}")
     url = f"{host}/api/pull"
@@ -39,31 +50,49 @@ def pull_via_http(model: str) -> None:
     req = urllib.request.Request(
         url, data=payload, headers={"Content-Type": "application/json"}, method="POST"
     )
-    try:
-        with urllib.request.urlopen(req, timeout=600) as response:
-            body = json.loads(response.read().decode("utf-8"))
-    except urllib.error.URLError as exc:
-        raise SystemExit(
-            f"Ollama HTTP API unreachable at {host}.\n"
-            "Ensure Ollama is running or set OLLAMA_EXE / OLLAMA_HOST."
-        ) from exc
 
-    error = body.get("error")
-    if error:
-        raise SystemExit(f"Ollama pull failed: {error}")
-    print(f"Model '{model}' pulled successfully via HTTP API.")
+    last_error: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=600) as response:
+                body = json.loads(response.read().decode("utf-8"))
+        except urllib.error.URLError as exc:
+            last_error = exc
+            if attempt < retries:
+                print(f"HTTP pull attempt {attempt}/{retries} failed; retrying in {delay_seconds}s...")
+                time.sleep(delay_seconds)
+                continue
+            raise SystemExit(
+                f"Ollama HTTP API unreachable at {host} after {retries} attempts.\n"
+                "Ensure Ollama is running or set OLLAMA_EXE / OLLAMA_HOST."
+            ) from exc
+
+        error = body.get("error")
+        if error:
+            if attempt < retries:
+                print(f"HTTP pull attempt {attempt}/{retries} failed with API error; retrying in {delay_seconds}s...")
+                time.sleep(delay_seconds)
+                continue
+            raise SystemExit(f"Ollama pull failed after {retries} attempts: {error}")
+
+        print(f"Model '{model}' pulled successfully via HTTP API.")
+        return
+
+    raise SystemExit(f"Ollama pull failed after {retries} attempts: {last_error}")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Pull an Ollama model")
     parser.add_argument("--model", required=True, help="Model name to pull (e.g. llama3.1)")
+    parser.add_argument("--retries", type=int, default=4, help="Number of pull retry attempts")
+    parser.add_argument("--delay-seconds", type=int, default=8, help="Delay between retries in seconds")
     args = parser.parse_args()
 
     exe = resolve_ollama()
     if exe:
-        pull_via_cli(exe, args.model)
+        pull_via_cli(exe, args.model, args.retries, args.delay_seconds)
     else:
-        pull_via_http(args.model)
+        pull_via_http(args.model, args.retries, args.delay_seconds)
 
 
 if __name__ == "__main__":
