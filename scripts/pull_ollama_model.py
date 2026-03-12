@@ -81,6 +81,33 @@ def pull_via_http(model: str, retries: int, delay_seconds: int) -> None:
     raise SystemExit(f"Ollama pull failed after {retries} attempts: {last_error}")
 
 
+def model_exists_via_cli(exe: str, model: str) -> bool:
+    result = subprocess.run([exe, "list"], text=True, capture_output=True, check=False)
+    if result.returncode != 0:
+        return False
+    lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    names = {line.split()[0] for line in lines[1:] if line.split()}
+    return model in names or f"{model}:latest" in names
+
+
+def model_exists_via_http(model: str) -> bool:
+    host = get_ollama_host()
+    req = urllib.request.Request(f"{host}/api/tags", method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=20) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.URLError:
+        return False
+
+    names = set()
+    for entry in payload.get("models", []):
+        for key in ("name", "model"):
+            value = entry.get(key)
+            if isinstance(value, str) and value.strip():
+                names.add(value.strip())
+    return model in names or f"{model}:latest" in names
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Pull an Ollama model")
     parser.add_argument("--model", required=True, help="Model name to pull (e.g. llama3.1)")
@@ -90,8 +117,14 @@ def main() -> None:
 
     exe = resolve_ollama()
     if exe:
+        if model_exists_via_cli(exe, args.model):
+            print(f"Model '{args.model}' already exists locally; skipping pull.")
+            return
         pull_via_cli(exe, args.model, args.retries, args.delay_seconds)
     else:
+        if model_exists_via_http(args.model):
+            print(f"Model '{args.model}' already exists on Ollama server; skipping pull.")
+            return
         pull_via_http(args.model, args.retries, args.delay_seconds)
 
 
