@@ -67,12 +67,28 @@ jobs:
         if: steps.target_check.outputs.has_targets == 'true'
         run: python scripts/generate_tests_with_ollama.py --targets .tmp/test-targets.txt --model ${{ env.OLLAMA_MODEL }}
 
-      - name: Run unit tests after generation
+      - name: Run unit tests after generation (attempt 1)
+        id: test_attempt
         if: steps.target_check.outputs.has_targets == 'true'
+        continue-on-error: true
         run: mvn --batch-mode --no-transfer-progress test
 
+      - name: Auto-fix generated tests when build fails
+        if: steps.target_check.outputs.has_targets == 'true' && steps.test_attempt.outcome == 'failure'
+        run: python scripts/fix_generated_tests.py --targets .tmp/test-targets.txt --model ${{ env.OLLAMA_MODEL }}
+
+      - name: Run unit tests after generation (attempt 2)
+        id: test_retry
+        if: steps.target_check.outputs.has_targets == 'true' && steps.test_attempt.outcome == 'failure'
+        continue-on-error: true
+        run: mvn --batch-mode --no-transfer-progress test
+
+      - name: Fail when tests still fail after auto-fix
+        if: steps.target_check.outputs.has_targets == 'true' && steps.test_attempt.outcome == 'failure' && steps.test_retry.outcome == 'failure'
+        run: exit 1
+
       - name: Create or update PR to auto-tests
-        if: steps.target_check.outputs.has_targets == 'true'
+        if: steps.target_check.outputs.has_targets == 'true' && (steps.test_attempt.outcome == 'success' || steps.test_retry.outcome == 'success')
         uses: peter-evans/create-pull-request@v7
         with:
           branch: bot/generated-tests
@@ -89,3 +105,4 @@ jobs:
           labels: |
             automated-tests
             needs-review
+
