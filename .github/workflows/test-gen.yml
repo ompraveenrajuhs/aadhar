@@ -55,7 +55,7 @@ jobs:
 
       - name: Pull Ollama model
         if: steps.target_check.outputs.has_targets == 'true'
-        run: ollama pull ${{ env.OLLAMA_MODEL }}
+        run: python scripts/pull_ollama_model.py --model ${{ env.OLLAMA_MODEL }}
 
       - name: Generate tests with Ollama
         if: steps.target_check.outputs.has_targets == 'true'
@@ -83,4 +83,5 @@ jobs:
           labels: |
             automated-tests
             needs-review
+
 
