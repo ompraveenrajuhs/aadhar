@@ -21,7 +21,7 @@ jobs:
     runs-on: [self-hosted]
     if: github.actor != 'github-actions[bot]'
     env:
-      OLLAMA_MODEL: llama3.1
+      OLLAMA_MODEL: phi3
       OLLAMA_EXE: ${{ vars.OLLAMA_EXE }}
       OLLAMA_HOST: ${{ vars.OLLAMA_HOST }}
 
@@ -83,5 +83,4 @@ jobs:
           labels: |
             automated-tests
             needs-review
-
 
