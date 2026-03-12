@@ -53,6 +53,10 @@ jobs:
         id: target_check
         run: python scripts/test_gen_precheck.py check-targets --targets .tmp/test-targets.txt
 
+      - name: Pull Ollama model
+        if: steps.target_check.outputs.has_targets == 'true'
+        run: ollama pull ${{ env.OLLAMA_MODEL }}
+
       - name: Generate tests with Ollama
         if: steps.target_check.outputs.has_targets == 'true'
         run: python scripts/generate_tests_with_ollama.py --targets .tmp/test-targets.txt --model ${{ env.OLLAMA_MODEL }}

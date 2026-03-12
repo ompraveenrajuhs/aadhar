@@ -5,7 +5,6 @@ import os
 import pathlib
 import re
 import subprocess
-import time
 import urllib.error
 import urllib.request
 from typing import Optional
@@ -17,152 +16,25 @@ PACKAGE_RE = re.compile(r"^\s*package\s+([\w\.]+);", re.MULTILINE)
 CLASS_RE = re.compile(r"\bclass\s+(\w+)")
 CODE_BLOCK_RE = re.compile(r"```(?:java)?\n(.*?)```", re.DOTALL)
 DEFAULT_OLLAMA_HOST = "http://127.0.0.1:11434"
-HEALTH_PATH = "/api/tags"
 
 
 def get_ollama_host() -> str:
     return (os.environ.get("OLLAMA_HOST", "").strip() or DEFAULT_OLLAMA_HOST).rstrip("/")
 
 
-def is_local_host(host: str) -> bool:
-    parsed = urlparse(host)
-    return parsed.hostname in {"127.0.0.1", "localhost", None}
-
-
-def build_request(path: str, payload: Optional[dict] = None) -> urllib.request.Request:
-    url = f"{get_ollama_host()}{path}"
-    if payload is None:
-        return urllib.request.Request(url, method="GET")
-    return urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
-
-def is_ollama_healthy(timeout: int = 5) -> bool:
-    try:
-        req = build_request(HEALTH_PATH)
-        with urllib.request.urlopen(req, timeout=timeout) as response:
-            return 200 <= response.status < 300
-    except (urllib.error.URLError, TimeoutError):
-        return False
-
-
-def fetch_installed_models() -> set[str]:
-    req = build_request(HEALTH_PATH)
-    try:
-        with urllib.request.urlopen(req, timeout=15) as response:
-            body = response.read().decode("utf-8")
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"Failed to query installed Ollama models at {get_ollama_host()}") from exc
-
-    parsed = json.loads(body)
-    models = parsed.get("models", [])
-    names: set[str] = set()
-    for entry in models:
-        for key in ("name", "model"):
-            value = entry.get(key)
-            if isinstance(value, str) and value.strip():
-                names.add(value.strip())
-    return names
-
-
-def has_model(model: str) -> bool:
-    installed = fetch_installed_models()
-    return model in installed or f"{model}:latest" in installed
-
-
-def start_ollama_server() -> None:
-    host = get_ollama_host()
-    if not is_local_host(host):
-        raise RuntimeError(
-            f"Ollama HTTP API is unreachable at {host} and auto-start is only supported for local hosts. "
-            "Set OLLAMA_HOST to a reachable server or install/run Ollama locally."
-        )
-
-    exe = resolve_ollama()
-    if not exe:
-        raise RuntimeError(
-            "Ollama is not running and no local executable could be found. "
-            "Install Ollama or set OLLAMA_EXE to the full path of ollama.exe."
-        )
-
-    print(f"Starting Ollama server using: {exe}")
-    popen_kwargs = {
-        "args": [exe, "serve"],
-        "stdout": subprocess.DEVNULL,
-        "stderr": subprocess.DEVNULL,
-        "stdin": subprocess.DEVNULL,
-    }
-    if os.name == "nt":
-        popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-    else:
-        popen_kwargs["start_new_session"] = True
-
-    subprocess.Popen(**popen_kwargs)
-
-
-def ensure_ollama_ready(timeout_seconds: int = 45) -> None:
-    if is_ollama_healthy():
-        print(f"Ollama API already reachable at {get_ollama_host()}")
-        return
-
-    start_ollama_server()
-    deadline = time.time() + timeout_seconds
-    while time.time() < deadline:
-        if is_ollama_healthy():
-            print(f"Ollama API became ready at {get_ollama_host()}")
-            return
-        time.sleep(2)
-
-    raise RuntimeError(
-        f"Ollama server did not become ready at {get_ollama_host()} within {timeout_seconds} seconds."
-    )
-
-
-def ensure_model_available(model: str) -> None:
-    if has_model(model):
-        print(f"Ollama model already available: {model}")
-        return
-
-    print(f"Ollama model not found locally, pulling: {model}")
-    exe = resolve_ollama()
-    if exe:
-        process = subprocess.run(
-            [exe, "pull", model],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        if process.returncode != 0:
-            raise RuntimeError(process.stderr.strip() or f"ollama pull {model} failed")
-        return
-
-    req = build_request("/api/pull", {"model": model, "stream": False})
-    try:
-        with urllib.request.urlopen(req, timeout=600) as response:
-            body = response.read().decode("utf-8")
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"Failed to pull model {model} via Ollama HTTP API") from exc
-
-    parsed = json.loads(body)
-    error = parsed.get("error")
-    if error:
-        raise RuntimeError(f"Ollama pull failed: {error}")
-
-
 def run_ollama_http(prompt: str, model: str) -> str:
-    req = build_request("/api/generate", {"model": model, "prompt": prompt, "stream": False})
+    host = get_ollama_host()
+    url = f"{host}/api/generate"
+    payload = json.dumps({"model": model, "prompt": prompt, "stream": False}).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
 
     try:
         with urllib.request.urlopen(req, timeout=300) as response:
             body = response.read().decode("utf-8")
     except urllib.error.URLError as exc:
         raise RuntimeError(
-            f"Ollama HTTP API is unreachable at {get_ollama_host()}. "
-            "Ensure Ollama is running or set OLLAMA_HOST/OLLAMA_EXE correctly."
+            f"Ollama HTTP API is unreachable at {host}. "
+            "Ensure Ollama is running and the model is pulled (ollama pull {model})."
         ) from exc
 
     parsed = json.loads(body)
@@ -239,9 +111,6 @@ def main():
     if not targets:
         print("No targets found, skipping test generation.")
         return
-
-    ensure_ollama_ready()
-    ensure_model_available(args.model)
 
     generated_count = 0
     for fqcn in targets:
