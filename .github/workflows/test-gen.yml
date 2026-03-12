@@ -46,6 +46,9 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Ensure Maven is available
+        run: python scripts/ensure_maven.py --version 3.9.9 --install-dir .tools/maven
+
       - name: Fetch auto-tests base ref
         run: git fetch origin auto-tests:refs/remotes/origin/auto-tests
 
