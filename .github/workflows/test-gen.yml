@@ -21,12 +21,20 @@ jobs:
     # Trigger note: touching this workflow file is used for controlled reruns during CI debugging.
     runs-on: [self-hosted]
     if: github.actor != 'github-actions[bot]'
+    defaults:
+      run:
+        shell: powershell
     env:
       OLLAMA_MODEL: phi3
       OLLAMA_EXE: ${{ vars.OLLAMA_EXE }}
       OLLAMA_HOST: ${{ vars.OLLAMA_HOST }}
+      # Use the custom truststore created on the runner host.
+      MAVEN_OPTS: >-
+        -Djavax.net.ssl.trustStore=C:\certs\maven-cacerts
+        -Djavax.net.ssl.trustStorePassword=changeit
       GIT_SSL_NO_VERIFY: "true"
       GIT_HTTP_SSL_VERIFY: "false"
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
     steps:
@@ -36,7 +44,7 @@ jobs:
           fetch-depth: 0
 
       - name: Sanitize PATH for tool resolution
-        shell: pwsh
+        shell: powershell
         run: |
           $segments = $env:PATH -split ';' | Where-Object {
             $_ -and ($_ -notmatch '(?i)windowsapps\\python\.exe')
