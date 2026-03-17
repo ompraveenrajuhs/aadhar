@@ -17,8 +17,6 @@ permissions:
 
 jobs:
   generate-tests:
-    # Defaults to self-hosted runner labels; extend if you add a dedicated label.
-    # Trigger note: touching this workflow file is used for controlled reruns during CI debugging.
     runs-on: [self-hosted]
     if: github.actor != 'github-actions[bot]'
     defaults:
@@ -80,32 +78,78 @@ jobs:
         if: steps.target_check.outputs.has_targets == 'true'
         run: python scripts/pull_ollama_model.py --model ${{ env.OLLAMA_MODEL }}
 
-      - name: Generate tests with Ollama
+      # ── Round 1: generate / augment tests ───────────────────────────────
+      - name: Generate tests (round 1)
         if: steps.target_check.outputs.has_targets == 'true'
         run: python scripts/generate_tests_with_ollama.py --targets .tmp/test-targets.txt --model ${{ env.OLLAMA_MODEL }}
 
-      - name: Run unit tests after generation (attempt 1)
-        id: test_attempt
+      - name: Auto-fix compile errors (round 1)
         if: steps.target_check.outputs.has_targets == 'true'
-        continue-on-error: true
-        run: mvn --batch-mode --no-transfer-progress test
-
-      - name: Auto-fix generated tests when build fails
-        if: steps.target_check.outputs.has_targets == 'true' && steps.test_attempt.outcome == 'failure'
         run: python scripts/fix_generated_tests.py --targets .tmp/test-targets.txt --model ${{ env.OLLAMA_MODEL }}
 
-      - name: Run unit tests after generation (attempt 2)
-        id: test_retry
-        if: steps.target_check.outputs.has_targets == 'true' && steps.test_attempt.outcome == 'failure'
+      - name: Run tests + JaCoCo (round 1)
+        id: test_r1
+        if: steps.target_check.outputs.has_targets == 'true'
         continue-on-error: true
-        run: mvn --batch-mode --no-transfer-progress test
+        run: mvn --batch-mode --no-transfer-progress verify
 
-      - name: Fail when tests still fail after auto-fix
-        if: steps.target_check.outputs.has_targets == 'true' && steps.test_attempt.outcome == 'failure' && steps.test_retry.outcome == 'failure'
+      - name: Check coverage (round 1)
+        id: cov_r1
+        if: steps.target_check.outputs.has_targets == 'true' && steps.test_r1.outcome == 'success'
+        continue-on-error: true
+        run: python scripts/check_coverage.py --report target/site/jacoco/jacoco.xml --threshold 80
+
+      # ── Round 2: generate more tests when coverage < 80 % ───────────────
+      - name: Generate tests (round 2 – coverage boost)
+        if: >
+          steps.target_check.outputs.has_targets == 'true' &&
+          steps.test_r1.outcome == 'success' &&
+          steps.cov_r1.outputs.coverage_ok == 'false'
+        run: |
+          python scripts/generate_tests_with_ollama.py `
+            --targets .tmp/test-targets.txt `
+            --model ${{ env.OLLAMA_MODEL }} `
+            --extra-instruction "Current coverage is ${{ steps.cov_r1.outputs.coverage_pct }}%. Write tests that cover uncovered branches and edge cases to push coverage above 80%."
+
+      - name: Auto-fix compile errors (round 2)
+        if: >
+          steps.target_check.outputs.has_targets == 'true' &&
+          steps.test_r1.outcome == 'success' &&
+          steps.cov_r1.outputs.coverage_ok == 'false'
+        run: python scripts/fix_generated_tests.py --targets .tmp/test-targets.txt --model ${{ env.OLLAMA_MODEL }}
+
+      - name: Run tests + JaCoCo (round 2)
+        id: test_r2
+        if: >
+          steps.target_check.outputs.has_targets == 'true' &&
+          steps.test_r1.outcome == 'success' &&
+          steps.cov_r1.outputs.coverage_ok == 'false'
+        continue-on-error: true
+        run: mvn --batch-mode --no-transfer-progress verify
+
+      - name: Check coverage (round 2)
+        id: cov_r2
+        if: >
+          steps.target_check.outputs.has_targets == 'true' &&
+          steps.test_r1.outcome == 'success' &&
+          steps.cov_r1.outputs.coverage_ok == 'false' &&
+          steps.test_r2.outcome == 'success'
+        continue-on-error: true
+        run: python scripts/check_coverage.py --report target/site/jacoco/jacoco.xml --threshold 80
+
+      # ── Fail job when tests never passed ────────────────────────────────
+      - name: Fail if both test rounds failed
+        if: >
+          steps.target_check.outputs.has_targets == 'true' &&
+          steps.test_r1.outcome == 'failure' &&
+          (steps.test_r2.outcome == 'failure' || steps.test_r2.outcome == '')
         run: exit 1
 
+      # ── Create PR to auto-tests ──────────────────────────────────────────
       - name: Create or update PR to auto-tests
-        if: steps.target_check.outputs.has_targets == 'true' && (steps.test_attempt.outcome == 'success' || steps.test_retry.outcome == 'success')
+        if: >
+          steps.target_check.outputs.has_targets == 'true' &&
+          (steps.test_r1.outcome == 'success' || steps.test_r2.outcome == 'success')
         env:
           NODE_TLS_REJECT_UNAUTHORIZED: "0"
           GIT_SSL_NO_VERIFY: "true"
@@ -116,13 +160,14 @@ jobs:
           base: auto-tests
           title: "chore(tests): AI-generated unit tests"
           body: |
-            This PR contains tests generated by the Ollama workflow.
-            - Scope: changed files and transitive dependents
+            Auto-generated tests appended into existing `*Test.java` files.
             - Model: ${{ env.OLLAMA_MODEL }}
-            - Target branch: auto-tests
+            - Coverage round 1: ${{ steps.cov_r1.outputs.coverage_pct }}%
+            - Coverage round 2: ${{ steps.cov_r2.outputs.coverage_pct }}%
+            - Target branch: `auto-tests`
 
-            Reviewer approval is required before merge.
-          commit-message: "chore(tests): add AI-generated tests"
+            Reviewer approval required before merge.
+          commit-message: "chore(tests): augment tests for coverage >= 80%"
           labels: |
             automated-tests
             needs-review

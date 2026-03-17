@@ -45,4 +45,11 @@ class AadhaarValidatorTest {
         assertFalse(validator.isMasked("123412341234"));
         assertFalse(validator.isMasked(null));
     }
+
+    @Test
+    void shouldRejectInvalidMaskedFormats() {
+        assertFalse(validator.isMasked("xxxxxxxx1234"));
+        assertFalse(validator.isMasked("XXXXXXX12345"));
+        assertFalse(validator.isMasked("XXXXXXXX12A4"));
+    }
 }
